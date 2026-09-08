@@ -29,9 +29,15 @@ jobs:
          GIST_JSON=$(curl -s -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
            https://api.github.com/gists/${{ secrets.GIST_ID }})
          CONTENT=$(echo "$GIST_JSON" | jq -r '.files | to_entries[0].value.content')
-         CONTENT_B64=$(echo -n "$CONTENT" | base64 -w0)
-         SHA=$(curl -s -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
-           https://git.ok.land/api/v1/repos/k/.profile/contents/README.md | jq -r .sha)
+
+         README_JSON=$(curl -s -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
+           https://git.ok.land/api/v1/repos/k/.profile/contents/README.md)
+         SHA=$(echo "$README_JSON" | jq -r .sha)
+         CURRENT=$(echo "$README_JSON" | jq -r .content | base64 -d)
+
+         NEW=$(echo "$CURRENT" | perl -0777 -pe "s/(<!-- START_MUSIC_BOX -->).*(<!-- END_MUSIC_BOX -->)/\$1\n\Q$CONTENT\E\n\$2/s")
+
+         CONTENT_B64=$(echo -n "$NEW" | base64 -w0)
          curl -s -X PUT \
            -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
            -H "Content-Type: application/json" \

@@ -30,33 +30,65 @@ jobs:
            https://api.github.com/gists/${{ secrets.GIST_ID }})
          echo "$GIST_JSON" | jq -r '.files | to_entries[0].value.content' > music.md
 
-         README_JSON=$(curl -s -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
-           https://git.ok.land/api/v1/repos/k/.profile/contents/README.md)
-         SHA=$(echo "$README_JSON" | jq -r .sha)
-         echo "$README_JSON" | jq -r .content | base64 -d > readme_current.md
-
          python3 - <<'PYEOF'
-         with open('readme_current.md', encoding='utf-8') as f:
-             readme = f.read()
+         import re, html
+
          with open('music.md', encoding='utf-8') as f:
-             music = f.read()
-         start = '<!-- START_MUSIC_BOX -->'
-         end = '<!-- END_MUSIC_BOX -->'
-         pre, _, rest = readme.partition(start)
-         _, _, post = rest.partition(end)
-         new_readme = pre + start + '\n' + music.strip() + '\n' + end + post
-         with open('readme_new.md', 'w', encoding='utf-8') as f:
-             f.write(new_readme)
+             raw = f.read()
+
+         pattern = re.compile(r'\|\s*[^|]*\|\s*([^\|█░]+?)\s*[█▊▍░]+\s*(\d+)\s*plays?\s*\|')
+         artists = [(m.group(1).strip(), int(m.group(2))) for m in pattern.finditer(raw)]
+
+         total = sum(p for _, p in artists) or 1
+         colors = ["#e53935", "#3949ab", "#8e24aa", "#00897b", "#fb8c00", "#43a047", "#fdd835", "#5e35b1"]
+
+         bar_width, bar_height = 300, 10
+         x = 0
+         segments = []
+         for i, (name, plays) in enumerate(artists):
+             w = bar_width * plays / total
+             segments.append(f'<rect x="{x:.1f}" y="0" width="{w:.1f}" height="{bar_height}" rx="0" fill="{colors[i % len(colors)]}" />')
+             x += w
+
+         legend, col_width, row_height = [], 170, 22
+         for i, (name, plays) in enumerate(artists):
+             pct = plays / total * 100
+             cx = 20 + (i % 2) * col_width
+             cy = 70 + (i // 2) * row_height
+             legend.append(
+                 f'<circle cx="{cx}" cy="{cy}" r="4" fill="{colors[i % len(colors)]}" />'
+                 f'<text x="{cx+12}" y="{cy+4}" font-family="sans-serif" font-size="12" fill="#24292f">'
+                 f'<tspan font-weight="600">{html.escape(name)}</tspan> {pct:.2f}%</text>'
+             )
+
+         height = 90 + ((len(artists) + 1) // 2) * row_height
+
+         svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="340" height="{height}">
+           <rect x="0.5" y="0.5" width="339" height="{height-1}" rx="12" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+           <text x="20" y="28" font-family="sans-serif" font-size="14" font-weight="600" fill="#24292f">This Week's Music (By Plays)</text>
+           <g transform="translate(20,42)">
+             <rect x="0" y="0" width="{bar_width}" height="{bar_height}" rx="5" fill="#eeeeee" />
+             {''.join(segments)}
+           </g>
+           {''.join(legend)}
+         </svg>'''
+
+         with open('music.svg', 'w', encoding='utf-8') as f:
+             f.write(svg)
          PYEOF
 
-         jq -n --arg content "$(base64 -w0 readme_new.md)" \
+         SHA=$(curl -s -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
+           "https://git.ok.land/api/v1/repos/k/.profile/contents/generated/music.svg" | jq -r '.sha // empty')
+
+         jq -n --arg content "$(base64 -w0 music.svg)" \
                --arg sha "$SHA" \
                --arg message "sync weekly music stats" \
                --arg branch "main" \
-               '{message: $message, content: $content, sha: $sha, branch: $branch}' > payload.json
+               'if $sha == "" then {message: $message, content: $content, branch: $branch}
+                else {message: $message, content: $content, sha: $sha, branch: $branch} end' > payload.json
 
          curl -s -X PUT \
            -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
            -H "Content-Type: application/json" \
            -d @payload.json \
-           https://git.ok.land/api/v1/repos/k/.profile/contents/README.md
+           "https://git.ok.land/api/v1/repos/k/.profile/contents/generated/music.svg"

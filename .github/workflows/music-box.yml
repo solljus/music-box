@@ -29,9 +29,6 @@ jobs:
          GIST_JSON=$(curl -s -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
            https://api.github.com/gists/${{ secrets.GIST_ID }})
          echo "$GIST_JSON" | jq -r '.files | to_entries[0].value.content' > music.md
-         echo "----- RAW GIST CONTENT -----"
-         cat -A music.md
-         echo "----- END -----"
 
          python3 - <<'PYEOF'
          import re, html
@@ -39,7 +36,7 @@ jobs:
          with open('music.md', encoding='utf-8') as f:
              raw = f.read()
 
-         pattern = re.compile(r'\|\s*[^|]*\|\s*([^\|█░]+?)\s*[█▊▍░]+\s*(\d+)\s*plays?\s*\|')
+         pattern = re.compile(r'^(.+?)\s+[\u2588-\u258F\u2591-\u2593]+\s*(\d+)\s+plays?\s*$', re.MULTILINE)
          artists = [(m.group(1).strip(), int(m.group(2))) for m in pattern.finditer(raw)]
 
          total = sum(p for _, p in artists) or 1

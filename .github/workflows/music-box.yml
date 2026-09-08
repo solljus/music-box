@@ -29,6 +29,9 @@ jobs:
          GIST_JSON=$(curl -s -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
            https://api.github.com/gists/${{ secrets.GIST_ID }})
          echo "$GIST_JSON" | jq -r '.files | to_entries[0].value.content' > music.md
+         echo "----- RAW GIST CONTENT -----"
+         cat -A music.md
+         echo "----- END -----"
 
          python3 - <<'PYEOF'
          import re, html
@@ -87,9 +90,8 @@ jobs:
                'if $sha == "" then {message: $message, content: $content, branch: $branch}
                 else {message: $message, content: $content, sha: $sha, branch: $branch} end' > payload.json
 
-         RESPONSE=$(curl -s -w "\nHTTP_STATUS:%{http_code}" -X PUT \
+         curl -s -X PUT \
            -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
            -H "Content-Type: application/json" \
            -d @payload.json \
-           "https://git.ok.land/api/v1/repos/k/.profile/contents/generated/music.svg")
-         echo "$RESPONSE"
+           "https://git.ok.land/api/v1/repos/k/.profile/contents/generated/music.svg"

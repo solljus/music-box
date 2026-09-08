@@ -28,18 +28,35 @@ jobs:
        run: |
          GIST_JSON=$(curl -s -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
            https://api.github.com/gists/${{ secrets.GIST_ID }})
-         CONTENT=$(echo "$GIST_JSON" | jq -r '.files | to_entries[0].value.content')
+         echo "$GIST_JSON" | jq -r '.files | to_entries[0].value.content' > music.md
 
          README_JSON=$(curl -s -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
            https://git.ok.land/api/v1/repos/k/.profile/contents/README.md)
          SHA=$(echo "$README_JSON" | jq -r .sha)
-         CURRENT=$(echo "$README_JSON" | jq -r .content | base64 -d)
+         echo "$README_JSON" | jq -r .content | base64 -d > readme_current.md
 
-         NEW=$(echo "$CURRENT" | perl -0777 -pe "s/(<!-- START_MUSIC_BOX -->).*(<!-- END_MUSIC_BOX -->)/\$1\n\Q$CONTENT\E\n\$2/s")
+         python3 - <<'PYEOF'
+         with open('readme_current.md', encoding='utf-8') as f:
+             readme = f.read()
+         with open('music.md', encoding='utf-8') as f:
+             music = f.read()
+         start = '<!-- START_MUSIC_BOX -->'
+         end = '<!-- END_MUSIC_BOX -->'
+         pre, _, rest = readme.partition(start)
+         _, _, post = rest.partition(end)
+         new_readme = pre + start + '\n' + music.strip() + '\n' + end + post
+         with open('readme_new.md', 'w', encoding='utf-8') as f:
+             f.write(new_readme)
+         PYEOF
 
-         CONTENT_B64=$(echo -n "$NEW" | base64 -w0)
+         jq -n --arg content "$(base64 -w0 readme_new.md)" \
+               --arg sha "$SHA" \
+               --arg message "sync weekly music stats" \
+               --arg branch "main" \
+               '{message: $message, content: $content, sha: $sha, branch: $branch}' > payload.json
+
          curl -s -X PUT \
            -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
            -H "Content-Type: application/json" \
-           -d "{\"message\":\"sync weekly music stats\",\"content\":\"$CONTENT_B64\",\"sha\":\"$SHA\",\"branch\":\"main\"}" \
+           -d @payload.json \
            https://git.ok.land/api/v1/repos/k/.profile/contents/README.md

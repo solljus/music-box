@@ -38,6 +38,7 @@ jobs:
 
          pattern = re.compile(r'^(.+?)\s+[\u2588-\u258F\u2591-\u2593]+\s*(\d+)\s+plays?\s*$', re.MULTILINE)
          artists = [(m.group(1).strip(), int(m.group(2))) for m in pattern.finditer(raw)]
+         artists = artists[:6]
 
          total = sum(p for _, p in artists) or 1
          colors = ["#e53935", "#3949ab", "#8e24aa", "#00897b", "#fb8c00", "#43a047", "#fdd835", "#5e35b1"]
@@ -92,3 +93,35 @@ jobs:
            -H "Content-Type: application/json" \
            -d @payload.json \
            "https://git.ok.land/api/v1/repos/k/.profile/contents/generated/music.svg"
+
+         TS=$(date +%s)
+         README_JSON=$(curl -s -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
+           "https://git.ok.land/api/v1/repos/k/.profile/contents/README.md")
+         README_SHA=$(echo "$README_JSON" | jq -r .sha)
+         echo "$README_JSON" | jq -r .content | base64 -d > readme_current.md
+
+         python3 - "$TS" <<'PYEOF'
+         import sys, re
+         ts = sys.argv[1]
+         with open('readme_current.md', encoding='utf-8') as f:
+             readme = f.read()
+         pattern = re.compile(r'(<!-- START_MUSIC_BOX -->).*?(<!-- END_MUSIC_BOX -->)', re.DOTALL)
+         replacement = ('<!-- START_MUSIC_BOX -->\n'
+                        f'        <img src="https://git.ok.land/k/.profile/media/branch/main/generated/music.svg?v={ts}" alt="Music stats" />\n'
+                        '<!-- END_MUSIC_BOX -->')
+         new_readme = pattern.sub(replacement, readme)
+         with open('readme_new.md', 'w', encoding='utf-8') as f:
+             f.write(new_readme)
+         PYEOF
+
+         jq -n --arg content "$(base64 -w0 readme_new.md)" \
+               --arg sha "$README_SHA" \
+               --arg message "bump music cache-buster" \
+               --arg branch "main" \
+               '{message: $message, content: $content, sha: $sha, branch: $branch}' > readme_payload.json
+
+         curl -s -X PUT \
+           -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
+           -H "Content-Type: application/json" \
+           -d @readme_payload.json \
+           "https://git.ok.land/api/v1/repos/k/.profile/contents/README.md"

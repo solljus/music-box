@@ -5,20 +5,17 @@ on:
     - cron: '0 * * * *'  # hourly
   push:
     branches: main       # i forgor to change this
-
 jobs:
   musicbox:
    runs-on: ubuntu-latest
    steps:
      - uses: actions/checkout@v4
-
      - name: Setup Node runtime
        uses: actions/setup-node@v4
        with:
          node-version: '20'
        env:
          ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-
      - run: npm install
      - name: Update
        uses: ./
@@ -27,3 +24,16 @@ jobs:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           LFMUSERNAME: ${{ secrets.LFMUSERNAME }}
           GIST_ID: ${{ secrets.GIST_ID }}
+     - name: Sync music stats to Forgejo profile
+       run: |
+         GIST_JSON=$(curl -s -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+           https://api.github.com/gists/${{ secrets.GIST_ID }})
+         CONTENT=$(echo "$GIST_JSON" | jq -r '.files | to_entries[0].value.content')
+         CONTENT_B64=$(echo -n "$CONTENT" | base64 -w0)
+         SHA=$(curl -s -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
+           https://git.ok.land/api/v1/repos/k/.profile/contents/README.md | jq -r .sha)
+         curl -s -X PUT \
+           -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
+           -H "Content-Type: application/json" \
+           -d "{\"message\":\"sync weekly music stats\",\"content\":\"$CONTENT_B64\",\"sha\":\"$SHA\",\"branch\":\"main\"}" \
+           https://git.ok.land/api/v1/repos/k/.profile/contents/README.md

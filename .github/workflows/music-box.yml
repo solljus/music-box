@@ -1,14 +1,24 @@
 name: music-box
 on:
+  workflow_dispatch:
   schedule:
     - cron: '0 * * * *'  # hourly
   push:
-    branches: master
+    branches: main       # i forgor to change this
+
 jobs:
   musicbox:
    runs-on: ubuntu-latest
    steps:
-     - uses: actions/checkout@v2
+     - uses: actions/checkout@v4
+
+     - name: Setup Node runtime
+       uses: actions/setup-node@v4
+       with:
+         node-version: '20'
+       env:
+         ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
+
      - run: npm install
      - name: Update
        uses: ./

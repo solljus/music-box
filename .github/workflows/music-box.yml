@@ -1,55 +1,19 @@
 name: music-box
 on:
-  workflow_dispatch:
   schedule:
-    - cron: '0 * * * *'
+    - cron: '0 * * * *'  # hourly
   push:
-    branches: main       
-
+    branches: master
 jobs:
   musicbox:
    runs-on: ubuntu-latest
    steps:
-     - name: Checkout Code
-       uses: actions/checkout@v4
-
-     - name: Setup Node
-       uses: actions/setup-node@v4
-       with:
-         node-version: '20'
-       env:
-         ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-
-     - name: Install Dependencies
-       run: npm install
-
-     - name: Modify script to output a local file
-       run: |
-         sed -i 's/await octokit.gists.update.*/await require("fs").promises.writeFile("music.txt", lines.join("\\n"));/g' index.js
-
-     - name: Run Script to Generate Music Output
-       run: |
-         node index.js || (echo "CRITICAL: The underlying JavaScript crashed. Check your Last.fm secrets." && exit 1)
+     - uses: actions/checkout@v2
+     - run: npm install
+     - name: Update
+       uses: ./
        env:
           LASTFM_KEY: ${{ secrets.LASTFM_KEY }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
           LFMUSERNAME: ${{ secrets.LFMUSERNAME }}
-          GH_TOKEN: "dummy" 
-          GIST_ID: "dummy"  
-
-     - name: Clone Forgejo Profile Repo and Inject Music
-       run: |
-         MUSIC_CONTENT=$(cat music.txt)
-         git clone https://${{ secrets.FORGEJO_TOKEN }}@git.ok.land/k/.profile.git forgejo-profile
-         cd forgejo-profile
-         python3 -c "
-         readme = open('README.md', 'r').read()
-         start = readme.find('<!-- START_MUSIC_BOX -->') + len('<!-- START_MUSIC_BOX -->\n')
-         end = readme.find('<!-- END_MUSIC_BOX -->')
-         new_readme = readme[:start] + ' \`\`\`text\n' + \"\"\"$MUSIC_CONTENT\"\"\" + '\n\`\`\`\n' + readme[end:]
-         open('README.md', 'w').write(new_readme)
-         "
-         git config user.name "GitHub Actions"
-         git config user.email "actions@github.com"
-         git add README.md
-         git diff --quiet && git diff --staged --quiet || git commit -m "Update music box stats via GitHub"
-         git push origin main
+          GIST_ID: ${{ secrets.GIST_ID }}

@@ -2,9 +2,8 @@ name: music-box
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 */6 * * *'   # every 6h; use '0 8 * * *' for once/day since the data is weekly anyway
-  # push trigger removed on purpose: this job commits to `main`, so keeping
-  # `push: branches: main` here made it re-trigger itself on its own commits.
+    - cron: '0 8 * * *'   # once daily 
+  # push trigger removed  
 
 jobs:
   musicbox:
@@ -86,12 +85,12 @@ jobs:
       - name: Commit only if the stats actually changed
         env:
           FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
-          SIGNING_KEY: ${{ secrets.MUSIC_BOX_SIGNING_KEY }}
+          SIGNING_KEY: ${{ secrets.PERSONAL_SIGNING_KEY }}
         run: |
           set -e
 
           # Bail out early if the newly generated SVG is identical to what's
-          # already committed -- this is what stops the "commit every hour
+          # already committed -- this is what stops the "commit every run
           # no matter what" behavior. The cache-buster timestamp is only
           # written into the README below, *after* this check passes.
           if git diff --quiet -- generated/music.svg; then
@@ -114,14 +113,14 @@ jobs:
               f.write(new_readme)
           PYEOF
 
-          # --- SSH-sign the commit so Forgejo marks it Verified ---
+          # --- SSH-sign the commit using your existing personal signing key ---
           mkdir -p ~/.ssh
           echo "$SIGNING_KEY" > ~/.ssh/music_box_signing
           chmod 600 ~/.ssh/music_box_signing
           ssh-keygen -y -f ~/.ssh/music_box_signing > ~/.ssh/music_box_signing.pub
 
-          git config user.name "music-box-bot"
-          git config user.email "music-box@users.noreply.git.ok.land"
+          git config user.name "k"
+          git config user.email "k@mid-december.com"
           git config gpg.format ssh
           git config user.signingkey ~/.ssh/music_box_signing.pub
           git config commit.gpgsign true

@@ -1,8 +1,13 @@
 name: music-box
 on:
   workflow_dispatch:
+    inputs:
+      force_commit:
+        description: 'Force a commit even if stats are unchanged (for testing signing)'
+        type: boolean
+        default: false
   schedule:
-    - cron: '0 8 * * *'   # once daily
+    - cron: '0 8 * * *'   # once daily 
 
 jobs:
   musicbox:
@@ -229,7 +234,7 @@ jobs:
         run: |
           set -e
  
-          if git diff --quiet -- generated/music.svg; then
+          if [ "${{ github.event.inputs.force_commit }}" != "true" ] && git diff --quiet -- generated/music.svg; then
             echo "No change in weekly music stats, skipping commit."
             exit 0
           fi

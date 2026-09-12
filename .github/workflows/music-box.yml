@@ -214,6 +214,11 @@ jobs:
 
           with open('generated/music.svg', 'w', encoding='utf-8') as f:
               f.write(svg)
+
+          print('----- PARSED ARTISTS -----')
+          for name, plays in artists:
+              print(f'{name}: {plays} plays')
+          print('----- END -----')
           PYEOF
 
       - name: Commit only if the stats actually changed
@@ -223,7 +228,7 @@ jobs:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
           set -e
-          
+ 
           if git diff --quiet -- generated/music.svg; then
             echo "No change in weekly music stats, skipping commit."
             exit 0

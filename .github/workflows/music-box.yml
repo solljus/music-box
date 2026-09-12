@@ -2,8 +2,8 @@ name: music-box
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 8 * * *'   # once daily 
-  # push trigger removed on purpose
+    - cron: '0 8 * * *'   # once daily
+
 jobs:
   musicbox:
     runs-on: ubuntu-latest
@@ -44,37 +44,172 @@ jobs:
           artists = artists[:6]
 
           total = sum(p for _, p in artists) or 1
-          colors = ["#e53935", "#3949ab", "#8e24aa", "#00897b", "#fb8c00", "#43a047", "#fdd835", "#5e35b1"]
+          colors = ["#e34c26", "#563d7c", "#3572A5", "#00897b", "#fb8c00", "#EB8CEB"]
 
-          bar_width, bar_height = 300, 10
-          x = 0
-          segments = []
-          for i, (name, plays) in enumerate(artists):
-              w = bar_width * plays / total
-              segments.append(f'<rect x="{x:.1f}" y="0" width="{w:.1f}" height="{bar_height}" rx="0" fill="{colors[i % len(colors)]}" />')
-              x += w
+          progress_items = ''.join(
+              f'<span style="background-color: {colors[i % len(colors)]};width: {plays/total*100:.3f}%;" class="progress-item"></span>'
+              for i, (name, plays) in enumerate(artists)
+          )
 
-          legend, col_width, row_height = [], 170, 22
-          for i, (name, plays) in enumerate(artists):
-              pct = plays / total * 100
-              cx = 20 + (i % 2) * col_width
-              cy = 70 + (i // 2) * row_height
-              legend.append(
-                  f'<circle cx="{cx}" cy="{cy}" r="4" fill="{colors[i % len(colors)]}" />'
-                  f'<text x="{cx+12}" y="{cy+4}" font-family="sans-serif" font-size="12" fill="#24292f">'
-                  f'<tspan font-weight="600">{html.escape(name)}</tspan> {pct:.2f}%</text>'
-              )
+          legend_items = ''.join(
+              f'''
+          <li style="animation-delay: {i*150}ms;">
+          <svg xmlns="http://www.w3.org/2000/svg" class="octicon" style="fill:{colors[i % len(colors)]};"
+          viewBox="0 0 16 16" version="1.1" width="16" height="16"><path
+          fill-rule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8z"></path></svg>
+          <span class="lang">{html.escape(name)}</span>
+          <span class="percent">{plays/total*100:.2f}%</span>
+          </li>
+          '''
+              for i, (name, plays) in enumerate(artists)
+          )
 
-          height = 90 + ((len(artists) + 1) // 2) * row_height
+          svg = f'''<svg id="gh-dark-mode-only" width="360" height="210" xmlns="http://www.w3.org/2000/svg">
+          <style>
+          svg {{
+            font-family: -apple-system, BlinkMacSystemFont, Segoe UI, Helvetica, Arial, sans-serif, Apple Color Emoji, Segoe UI Emoji;
+            font-size: 14px;
+            line-height: 21px;
+          }}
 
-          svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="340" height="{height}">
-            <rect x="0.5" y="0.5" width="339" height="{height-1}" rx="12" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-            <text x="20" y="28" font-family="sans-serif" font-size="14" font-weight="600" fill="#24292f">This Week's Music (By Plays)</text>
-            <g transform="translate(20,42)">
-              <rect x="0" y="0" width="{bar_width}" height="{bar_height}" rx="5" fill="#eeeeee" />
-              {''.join(segments)}
-            </g>
-            {''.join(legend)}
+          #background {{
+            width: calc(100% - 10px);
+            height: calc(100% - 10px);
+            fill: white;
+            stroke: rgb(225, 228, 232);
+            stroke-width: 1px;
+            rx: 6px;
+            ry: 6px;
+          }}
+
+          #gh-dark-mode-only:target #background {{
+            fill: #0d1117;
+            stroke-width: 0.5px;
+          }}
+
+          foreignObject {{
+            width: calc(100% - 10px - 32px);
+            height: calc(100% - 10px - 24px);
+          }}
+
+          h2 {{
+            margin-top: 0;
+            margin-bottom: 0.75em;
+            line-height: 24px;
+            font-size: 16px;
+            font-weight: 600;
+            color: rgb(36, 41, 46);
+            fill: rgb(36, 41, 46);
+          }}
+
+          #gh-dark-mode-only:target h2 {{
+            color: #c9d1d9;
+            fill: #c9d1d9;
+          }}
+
+          ul {{
+            list-style: none;
+            padding-left: 0;
+            margin-top: 0;
+            margin-bottom: 0;
+          }}
+
+          li {{
+            display: inline-flex;
+            font-size: 12px;
+            margin-right: 2ch;
+            align-items: center;
+            flex-wrap: nowrap;
+            transform: translateX(-500%);
+            animation: slideIn 2s ease-in-out forwards;
+          }}
+
+          @keyframes slideIn {{
+            to {{
+              transform: translateX(0);
+            }}
+          }}
+
+          div.ellipsis {{
+            height: 100%;
+            overflow: hidden;
+            text-overflow: ellipsis;
+          }}
+
+          .octicon {{
+            fill: rgb(88, 96, 105);
+            margin-right: 0.5ch;
+            vertical-align: top;
+          }}
+
+          #gh-dark-mode-only:target .octicon {{
+            color: #8b949e;
+            fill: #8b949e;
+          }}
+
+          .progress {{
+            display: flex;
+            height: 8px;
+            overflow: hidden;
+            background-color: rgb(225, 228, 232);
+            border-radius: 6px;
+            outline: 1px solid transparent;
+            margin-bottom: 1em;
+          }}
+
+          #gh-dark-mode-only:target .progress {{
+            background-color: rgba(110, 118, 129, 0.4);
+          }}
+
+          .progress-item {{
+            outline: 2px solid rgb(225, 228, 232);
+            border-collapse: collapse;
+          }}
+
+          #gh-dark-mode-only:target .progress-item {{
+            outline: 2px solid #393f47;
+          }}
+
+          .lang {{
+            font-weight: 600;
+            margin-right: 4px;
+            color: rgb(36, 41, 46);
+          }}
+
+          #gh-dark-mode-only:target .lang {{
+            color: #c9d1d9;
+          }}
+
+          .percent {{
+            color: rgb(88, 96, 105)
+          }}
+
+          #gh-dark-mode-only:target .percent {{
+            color: #8b949e;
+          }}
+          </style>
+          <g>
+          <rect x="5" y="5" id="background" />
+          <g>
+          <foreignObject x="21" y="17" width="318" height="176">
+          <div xmlns="http://www.w3.org/1999/xhtml" class="ellipsis">
+
+          <h2>This Week's Music (By Plays)</h2>
+
+          <div>
+          <span class="progress">
+          {progress_items}
+          </span>
+          </div>
+
+          <ul>
+          {legend_items}
+          </ul>
+
+          </div>
+          </foreignObject>
+          </g>
+          </g>
           </svg>'''
 
           with open('generated/music.svg', 'w', encoding='utf-8') as f:
@@ -88,7 +223,7 @@ jobs:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
           set -e
-
+          
           if git diff --quiet -- generated/music.svg; then
             echo "No change in weekly music stats, skipping commit."
             exit 0

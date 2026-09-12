@@ -254,29 +254,30 @@ jobs:
               f.write(new_readme)
           PYEOF
 
-          # --- GPG-sign the commit using the F172ECD9CFC78C99 subkey ---
+          # --- GPG-sign the commit using the B0859C4FCCAA699D signing subkey ---
           export GNUPGHOME="$RUNNER_TEMP/gnupg"
           mkdir -p "$GNUPGHOME"
           chmod 700 "$GNUPGHOME"
+          echo "allow-loopback-pinentry" > "$GNUPGHOME/gpg-agent.conf"
+          echo "pinentry-mode loopback" > "$GNUPGHOME/gpg.conf"
+          gpgconf --kill gpg-agent || true
 
           echo "$GPG_SIGNING_KEY" | gpg --batch --import
 
           git config user.name "k"
           git config user.email "k@mid-december.com"
           git config gpg.format openpgp
-          git config user.signingkey F172ECD9CFC78C99
+          git config user.signingkey B0859C4FCCAA699D
           git config commit.gpgsign true
-          git config gpg.program gpg
 
-          if [ -n "$GPG_PASSPHRASE" ]; then
-            echo "$GPG_PASSPHRASE" > "$GNUPGHOME/passphrase"
-            git config gpg.openpgp.program "$(pwd)/gpg-wrapper.sh"
-            cat > gpg-wrapper.sh << 'WRAPEOF'
+          echo "${GPG_PASSPHRASE:-}" > "$GNUPGHOME/passphrase"
+          chmod 600 "$GNUPGHOME/passphrase"
+          cat > gpg-wrapper.sh << 'WRAPEOF'
           #!/bin/sh
           exec gpg --batch --yes --pinentry-mode loopback --passphrase-file "$GNUPGHOME/passphrase" "$@"
           WRAPEOF
-            chmod +x gpg-wrapper.sh
-          fi
+          chmod +x gpg-wrapper.sh
+          git config gpg.program "$(pwd)/gpg-wrapper.sh"
 
           git add generated/music.svg README.md
           git commit -m "sync weekly music stats"

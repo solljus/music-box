@@ -8,7 +8,6 @@ on:
         default: false
   schedule:
     - cron: '0 8 * * *'   # once daily 
-
 jobs:
   musicbox:
     runs-on: ubuntu-latest
@@ -233,7 +232,13 @@ jobs:
           GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
         run: |
           set -e
- 
+
+          rm -rf profile-repo
+          git clone "https://k:${FORGEJO_TOKEN}@git.ok.land/k/.profile.git" profile-repo
+          mkdir -p profile-repo/generated
+          cp generated/music.svg profile-repo/generated/music.svg
+          cd profile-repo
+
           if [ "${{ github.event.inputs.force_commit }}" != "true" ] && git diff --quiet -- generated/music.svg; then
             echo "No change in weekly music stats, skipping commit."
             exit 0
@@ -281,6 +286,4 @@ jobs:
 
           git add generated/music.svg README.md
           git commit -m "sync weekly music stats"
-
-          git remote set-url origin "https://k:${FORGEJO_TOKEN}@git.ok.land/k/.profile.git"
           git push origin main

@@ -2,126 +2,132 @@ name: music-box
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0 * * * *'  # hourly
-  push:
-    branches: main       # i forgor to change this
+    - cron: '0 */6 * * *'   # every 6h; use '0 8 * * *' for once/day since the data is weekly anyway
+  # push trigger removed on purpose: this job commits to `main`, so keeping
+  # `push: branches: main` here made it re-trigger itself on its own commits.
+
 jobs:
   musicbox:
-   runs-on: ubuntu-latest
-   steps:
-     - uses: actions/checkout@v4
-     - name: Setup Node runtime
-       uses: actions/setup-node@v4
-       with:
-         node-version: '20'
-       env:
-         ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION: true
-     - run: npm install
-     - name: Update
-       uses: ./
-       env:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - run: npm install
+
+      - name: Update Gist
+        uses: ./
+        env:
           LASTFM_KEY: ${{ secrets.LASTFM_KEY }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           LFMUSERNAME: ${{ secrets.LFMUSERNAME }}
           GIST_ID: ${{ secrets.GIST_ID }}
-     - name: Sync music stats to Forgejo profile
-       run: |
-         GIST_JSON=$(curl -s -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
-           https://api.github.com/gists/${{ secrets.GIST_ID }})
-         echo "$GIST_JSON" | jq -r '.files | to_entries[0].value.content' > music.md
 
-         python3 - <<'PYEOF'
-         import re, html
+      - name: Build music.svg from gist
+        run: |
+          GIST_JSON=$(curl -s -H "Authorization: token ${{ secrets.GH_TOKEN }}" \
+            https://api.github.com/gists/${{ secrets.GIST_ID }})
+          echo "$GIST_JSON" | jq -r '.files | to_entries[0].value.content' > music.md
 
-         with open('music.md', encoding='utf-8') as f:
-             raw = f.read()
+          mkdir -p generated
 
-         pattern = re.compile(r'^(.+?)\s+[\u2588-\u258F\u2591-\u2593]+\s*(\d+)\s+plays?\s*$', re.MULTILINE)
-         artists = [(m.group(1).strip(), int(m.group(2))) for m in pattern.finditer(raw)]
-         artists = artists[:6]
+          python3 - <<'PYEOF'
+          import re, html
 
-         total = sum(p for _, p in artists) or 1
-         colors = ["#e53935", "#3949ab", "#8e24aa", "#00897b", "#fb8c00", "#43a047", "#fdd835", "#5e35b1"]
+          with open('music.md', encoding='utf-8') as f:
+              raw = f.read()
 
-         bar_width, bar_height = 300, 10
-         x = 0
-         segments = []
-         for i, (name, plays) in enumerate(artists):
-             w = bar_width * plays / total
-             segments.append(f'<rect x="{x:.1f}" y="0" width="{w:.1f}" height="{bar_height}" rx="0" fill="{colors[i % len(colors)]}" />')
-             x += w
+          pattern = re.compile(r'^(.+?)\s+[\u2588-\u258F\u2591-\u2593]+\s*(\d+)\s+plays?\s*$', re.MULTILINE)
+          artists = [(m.group(1).strip(), int(m.group(2))) for m in pattern.finditer(raw)]
+          artists = artists[:6]
 
-         legend, col_width, row_height = [], 170, 22
-         for i, (name, plays) in enumerate(artists):
-             pct = plays / total * 100
-             cx = 20 + (i % 2) * col_width
-             cy = 70 + (i // 2) * row_height
-             legend.append(
-                 f'<circle cx="{cx}" cy="{cy}" r="4" fill="{colors[i % len(colors)]}" />'
-                 f'<text x="{cx+12}" y="{cy+4}" font-family="sans-serif" font-size="12" fill="#24292f">'
-                 f'<tspan font-weight="600">{html.escape(name)}</tspan> {pct:.2f}%</text>'
-             )
+          total = sum(p for _, p in artists) or 1
+          colors = ["#e53935", "#3949ab", "#8e24aa", "#00897b", "#fb8c00", "#43a047", "#fdd835", "#5e35b1"]
 
-         height = 90 + ((len(artists) + 1) // 2) * row_height
+          bar_width, bar_height = 300, 10
+          x = 0
+          segments = []
+          for i, (name, plays) in enumerate(artists):
+              w = bar_width * plays / total
+              segments.append(f'<rect x="{x:.1f}" y="0" width="{w:.1f}" height="{bar_height}" rx="0" fill="{colors[i % len(colors)]}" />')
+              x += w
 
-         svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="340" height="{height}">
-           <rect x="0.5" y="0.5" width="339" height="{height-1}" rx="12" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-           <text x="20" y="28" font-family="sans-serif" font-size="14" font-weight="600" fill="#24292f">This Week's Music (By Plays)</text>
-           <g transform="translate(20,42)">
-             <rect x="0" y="0" width="{bar_width}" height="{bar_height}" rx="5" fill="#eeeeee" />
-             {''.join(segments)}
-           </g>
-           {''.join(legend)}
-         </svg>'''
+          legend, col_width, row_height = [], 170, 22
+          for i, (name, plays) in enumerate(artists):
+              pct = plays / total * 100
+              cx = 20 + (i % 2) * col_width
+              cy = 70 + (i // 2) * row_height
+              legend.append(
+                  f'<circle cx="{cx}" cy="{cy}" r="4" fill="{colors[i % len(colors)]}" />'
+                  f'<text x="{cx+12}" y="{cy+4}" font-family="sans-serif" font-size="12" fill="#24292f">'
+                  f'<tspan font-weight="600">{html.escape(name)}</tspan> {pct:.2f}%</text>'
+              )
 
-         with open('music.svg', 'w', encoding='utf-8') as f:
-             f.write(svg)
-         PYEOF
+          height = 90 + ((len(artists) + 1) // 2) * row_height
 
-         SHA=$(curl -s -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
-           "https://git.ok.land/api/v1/repos/k/.profile/contents/generated/music.svg" | jq -r '.sha // empty')
+          svg = f'''<svg xmlns="http://www.w3.org/2000/svg" width="340" height="{height}">
+            <rect x="0.5" y="0.5" width="339" height="{height-1}" rx="12" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
+            <text x="20" y="28" font-family="sans-serif" font-size="14" font-weight="600" fill="#24292f">This Week's Music (By Plays)</text>
+            <g transform="translate(20,42)">
+              <rect x="0" y="0" width="{bar_width}" height="{bar_height}" rx="5" fill="#eeeeee" />
+              {''.join(segments)}
+            </g>
+            {''.join(legend)}
+          </svg>'''
 
-         jq -n --arg content "$(base64 -w0 music.svg)" \
-               --arg sha "$SHA" \
-               --arg message "sync weekly music stats" \
-               --arg branch "main" \
-               'if $sha == "" then {message: $message, content: $content, branch: $branch}
-                else {message: $message, content: $content, sha: $sha, branch: $branch} end' > payload.json
+          with open('generated/music.svg', 'w', encoding='utf-8') as f:
+              f.write(svg)
+          PYEOF
 
-         curl -s -X PUT \
-           -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
-           -H "Content-Type: application/json" \
-           -d @payload.json \
-           "https://git.ok.land/api/v1/repos/k/.profile/contents/generated/music.svg"
+      - name: Commit only if the stats actually changed
+        env:
+          FORGEJO_TOKEN: ${{ secrets.FORGEJO_TOKEN }}
+          SIGNING_KEY: ${{ secrets.MUSIC_BOX_SIGNING_KEY }}
+        run: |
+          set -e
 
-         TS=$(date +%s)
-         README_JSON=$(curl -s -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
-           "https://git.ok.land/api/v1/repos/k/.profile/contents/README.md")
-         README_SHA=$(echo "$README_JSON" | jq -r .sha)
-         echo "$README_JSON" | jq -r .content | base64 -d > readme_current.md
+          # Bail out early if the newly generated SVG is identical to what's
+          # already committed -- this is what stops the "commit every hour
+          # no matter what" behavior. The cache-buster timestamp is only
+          # written into the README below, *after* this check passes.
+          if git diff --quiet -- generated/music.svg; then
+            echo "No change in weekly music stats, skipping commit."
+            exit 0
+          fi
 
-         python3 - "$TS" <<'PYEOF'
-         import sys, re
-         ts = sys.argv[1]
-         with open('readme_current.md', encoding='utf-8') as f:
-             readme = f.read()
-         pattern = re.compile(r'(<!-- START_MUSIC_BOX -->).*?(<!-- END_MUSIC_BOX -->)', re.DOTALL)
-         replacement = ('<!-- START_MUSIC_BOX -->\n'
-                        f'        <img src="https://git.ok.land/k/.profile/media/branch/main/generated/music.svg?v={ts}" alt="Music stats" />\n'
-                        '<!-- END_MUSIC_BOX -->')
-         new_readme = pattern.sub(replacement, readme)
-         with open('readme_new.md', 'w', encoding='utf-8') as f:
-             f.write(new_readme)
-         PYEOF
+          TS=$(date +%s)
+          python3 - "$TS" <<'PYEOF'
+          import sys, re
+          ts = sys.argv[1]
+          with open('README.md', encoding='utf-8') as f:
+              readme = f.read()
+          pattern = re.compile(r'(<!-- START_MUSIC_BOX -->).*?(<!-- END_MUSIC_BOX -->)', re.DOTALL)
+          replacement = ('<!-- START_MUSIC_BOX -->\n'
+                         f'        <img src="https://git.ok.land/k/.profile/media/branch/main/generated/music.svg?v={ts}" alt="Music stats" />\n'
+                         '<!-- END_MUSIC_BOX -->')
+          new_readme = pattern.sub(replacement, readme)
+          with open('README.md', 'w', encoding='utf-8') as f:
+              f.write(new_readme)
+          PYEOF
 
-         jq -n --arg content "$(base64 -w0 readme_new.md)" \
-               --arg sha "$README_SHA" \
-               --arg message "bump music cache-buster" \
-               --arg branch "main" \
-               '{message: $message, content: $content, sha: $sha, branch: $branch}' > readme_payload.json
+          # --- SSH-sign the commit so Forgejo marks it Verified ---
+          mkdir -p ~/.ssh
+          echo "$SIGNING_KEY" > ~/.ssh/music_box_signing
+          chmod 600 ~/.ssh/music_box_signing
+          ssh-keygen -y -f ~/.ssh/music_box_signing > ~/.ssh/music_box_signing.pub
 
-         curl -s -X PUT \
-           -H "Authorization: token ${{ secrets.FORGEJO_TOKEN }}" \
-           -H "Content-Type: application/json" \
-           -d @readme_payload.json \
-           "https://git.ok.land/api/v1/repos/k/.profile/contents/README.md"
+          git config user.name "music-box-bot"
+          git config user.email "music-box@users.noreply.git.ok.land"
+          git config gpg.format ssh
+          git config user.signingkey ~/.ssh/music_box_signing.pub
+          git config commit.gpgsign true
+
+          git add generated/music.svg README.md
+          git commit -m "sync weekly music stats"
+
+          git remote set-url origin "https://k:${FORGEJO_TOKEN}@git.ok.land/k/.profile.git"
+          git push origin main
